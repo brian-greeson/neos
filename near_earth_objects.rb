@@ -6,32 +6,43 @@ Figaro.application = Figaro::Application.new(environment: 'production', path: Fi
 Figaro.load
 
 class NearEarthObjects
-  def self.find_neos_by_date(date)
-    conn = Faraday.new(
+  attr_reader :objects, :date
+
+  def initialize(date)
+    @date = date
+    @uri = '/neo/rest/v1/feed'
+    @objects = JSON.parse(neos_on_date.body, symbolize_names: true)[:near_earth_objects][:"#{date}"]
+  end
+
+  def neos_on_date
+    connection.get(@uri)
+  end
+
+  def connection
+    Faraday.new(
       url: 'https://api.nasa.gov',
       params: { start_date: date, api_key: ENV['nasa_api_key']}
     )
-    asteroids_list_data = conn.get('/neo/rest/v1/feed')
+  end
 
-    parsed_asteroids_data = JSON.parse(asteroids_list_data.body, symbolize_names: true)[:near_earth_objects][:"#{date}"]
-
-    largest_astroid_diameter = parsed_asteroids_data.map do |astroid|
+  def largest_diameter
+    @objects.map do |astroid|
       astroid[:estimated_diameter][:feet][:estimated_diameter_max].to_i
     end.max { |a,b| a<=> b}
+  end
 
-    total_number_of_astroids = parsed_asteroids_data.count
-    formatted_asteroid_data = parsed_asteroids_data.map do |astroid|
+  def count
+    @objects.count
+  end
+
+  def astroid_list
+    @objects.map do |astroid|
       {
         name: astroid[:name],
         diameter: "#{astroid[:estimated_diameter][:feet][:estimated_diameter_max].to_i} ft",
         miss_distance: "#{astroid[:close_approach_data][0][:miss_distance][:miles].to_i} miles"
       }
     end
-
-    {
-      astroid_list: formatted_asteroid_data,
-      biggest_astroid: largest_astroid_diameter,
-      total_number_of_astroids: total_number_of_astroids
-    }
   end
 end
+
